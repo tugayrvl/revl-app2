@@ -818,12 +818,11 @@ function SalesPipelineApp({ onLogout }) {
   // Auto-save to localStorage + Supabase
   useEffect(() => { saveData(data); }, [data]);
 
-  // Load from Supabase on startup (if enabled)
+  // Load from Supabase on startup + initial table sync
   useEffect(() => {
     if (supabaseEnabled) {
       loadDataFromSupabase().then(cloudData => {
         if (cloudData) {
-          // Merge: cloud data takes precedence if more recent
           const localData = loadDataFromLocal();
           const cloudTime = new Date(cloudData.lastUpdated || 0).getTime();
           const localTime = new Date(localData.lastUpdated || 0).getTime();
@@ -832,6 +831,10 @@ function SalesPipelineApp({ onLogout }) {
             console.log("✅ Supabase'den veri yüklendi");
           }
         }
+        // Initial sync: push current data to separate tables
+        const currentData = loadDataFromLocal();
+        syncTablesToSupabase(currentData);
+        console.log("🔄 Tablo sync başlatıldı...");
       });
     }
   }, []);
