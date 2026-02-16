@@ -488,15 +488,110 @@ const loadDataFromSupabase = async () => {
 const saveDataToSupabase = async (data) => {
   if (!supabaseClient) return false;
   try {
+    // Save JSON blob (existing behavior)
     const { error } = await supabaseClient
       .from('app_data')
       .upsert({ user_id: 'default', data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
     if (error) throw error;
+
+    // Sync to separate tables (debounced)
+    syncTablesToSupabase(data);
+
     return true;
   } catch (err) {
     console.error('Supabase save error:', err);
     return false;
   }
+};
+
+// Sync companies, contacts, call_logs to separate Supabase tables
+let _syncTimer = null;
+const syncTablesToSupabase = (data) => {
+  if (!supabaseClient) return;
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      // Sync companies
+      const existingCompanies = await supabaseClient.from('companies').select('id');
+      const existingCompanyIds = new Set((existingCompanies.data || []).map(c => c.id));
+      const currentCompanyIds = new Set((data.companies || []).map(c => c.id));
+
+      // Delete removed companies
+      const deletedCompanyIds = [...existingCompanyIds].filter(id => !currentCompanyIds.has(id));
+      if (deletedCompanyIds.length > 0) {
+        await supabaseClient.from('companies').delete().in('id', deletedCompanyIds);
+      }
+
+      // Upsert current companies
+      if (data.companies?.length > 0) {
+        const batch = data.companies.map(c => ({
+          id: c.id,
+          name: c.name || null,
+          industry: c.industry || null,
+          status: c.status || null,
+          tracking_type: c.trackingType || null,
+          target_week: c.targetWeek || null,
+          device_status: c.deviceStatus || null,
+          device_brand: c.deviceBrand || null,
+          website: c.website || null,
+          notes: c.notes || null,
+          meta: c
+        }));
+        await supabaseClient.from('companies').upsert(batch, { onConflict: 'id' });
+      }
+
+      // Sync contacts
+      const existingContacts = await supabaseClient.from('contacts').select('id');
+      const existingContactIds = new Set((existingContacts.data || []).map(c => c.id));
+      const currentContactIds = new Set((data.contacts || []).map(c => c.id));
+
+      const deletedContactIds = [...existingContactIds].filter(id => !currentContactIds.has(id));
+      if (deletedContactIds.length > 0) {
+        await supabaseClient.from('contacts').delete().in('id', deletedContactIds);
+      }
+
+      if (data.contacts?.length > 0) {
+        const batch = data.contacts.map(c => ({
+          id: c.id,
+          company_id: c.companyId || null,
+          name: c.name || null,
+          title: c.title || null,
+          phone: c.phone || null,
+          phone2: c.phone2 || null,
+          email: c.email || null,
+          meta: c
+        }));
+        await supabaseClient.from('contacts').upsert(batch, { onConflict: 'id' });
+      }
+
+      // Sync call_logs
+      const existingLogs = await supabaseClient.from('call_logs').select('id');
+      const existingLogIds = new Set((existingLogs.data || []).map(l => l.id));
+      const currentLogIds = new Set((data.callLogs || []).map(l => l.id));
+
+      const deletedLogIds = [...existingLogIds].filter(id => !currentLogIds.has(id));
+      if (deletedLogIds.length > 0) {
+        await supabaseClient.from('call_logs').delete().in('id', deletedLogIds);
+      }
+
+      if (data.callLogs?.length > 0) {
+        const batch = data.callLogs.map(l => ({
+          id: l.id,
+          company_id: l.companyId || null,
+          contact_id: l.contactId || null,
+          result: l.result || null,
+          notes: l.notes || null,
+          date: l.date || null,
+          meta: l
+        }));
+        await supabaseClient.from('call_logs').upsert(batch, { onConflict: 'id' });
+      }
+
+      console.log('Tables synced ✓');
+    } catch (err) {
+      console.error('Table sync error:', err);
+    }
+  }, 3000); // 3 saniye debounce
 };
 
 // Combined load function
