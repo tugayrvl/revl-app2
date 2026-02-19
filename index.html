@@ -807,6 +807,10 @@ function SalesPipelineApp({ onLogout }) {
   const [companyFilter, setCompanyFilter] = useState({ device: "all", phone: "all", assigned: "all" }); // device: all|none|competitor, phone: all|has_phone|no_phone, assigned: all|unassigned|assigned
   const [targetWeekPicker, setTargetWeekPicker] = useState(null); // { companyId, show }
   const [deferDropdown, setDeferDropdown] = useState(null); // companyId of open defer dropdown
+  // Followup defer (devret) state
+  const [deferModeFollowup, setDeferModeFollowup] = useState(false);
+  const [selectedDeferFollowups, setSelectedDeferFollowups] = useState([]);
+  const [deferTargetWeekFollowup, setDeferTargetWeekFollowup] = useState(currentWeek + 1);
   const [assignWeek, setAssignWeek] = useState(currentWeek);
   const [selectedContact, setSelectedContact] = useState(null); // For contact profile modal
   const [showCallPanel, setShowCallPanel] = useState(false); // Separate state for call panel (can coexist with modals)
@@ -1862,50 +1866,6 @@ function SalesPipelineApp({ onLogout }) {
               {company.deviceStatus === "none" ? "Cihaz Yok" : company.deviceStatus === "ours" ? "Bizde" : company.deviceStatus === "competitor" ? `Cihaz Var${company.deviceBrand ? ` / ${company.deviceBrand}` : ""}` : ""}
             </div>
           )}
-          {/* Defer button for followup companies - bottom right */}
-          {type === "followup" && (
-            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 6 }}>
-              {deferDropdown === company.id && (
-                <select
-                  autoFocus
-                  style={{ ...s.select, fontSize: 10, padding: "3px 6px", background: colors.surfaceHover, color: colors.text }}
-                  value=""
-                  onChange={(e) => {
-                    const weeks = parseInt(e.target.value);
-                    if (weeks > 0) {
-                      updateData(prev => ({
-                        ...prev,
-                        companies: prev.companies.map(c => c.id === company.id ? { ...c, deferredToWeek: selectedWeek + weeks } : c),
-                        activityLog: [...(prev.activityLog || []), {
-                          id: uid(), type: "defer", companyId: company.id,
-                          fromWeek: selectedWeek, toWeek: selectedWeek + weeks,
-                          date: new Date().toISOString(), week: selectedWeek, year: currentYear
-                        }]
-                      }));
-                      showSync(`Firma H${selectedWeek + weeks}'e devredildi ✓`);
-                    }
-                    setDeferDropdown(null);
-                  }}
-                  onBlur={() => setDeferDropdown(null)}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <option value="">Hafta seç...</option>
-                  <option value="1">H{selectedWeek + 1} (+1)</option>
-                  <option value="2">H{selectedWeek + 2} (+2)</option>
-                  <option value="3">H{selectedWeek + 3} (+3)</option>
-                  <option value="4">H{selectedWeek + 4} (+4)</option>
-                  <option value="6">H{selectedWeek + 6} (+6)</option>
-                  <option value="8">H{selectedWeek + 8} (+8)</option>
-                </select>
-              )}
-              <button
-                style={{ ...s.btn(), fontSize: 10, padding: "3px 8px" }}
-                onClick={(e) => { e.stopPropagation(); setDeferDropdown(deferDropdown === company.id ? null : company.id); }}
-              >
-                ⏩ Devret
-              </button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -2082,12 +2042,102 @@ function SalesPipelineApp({ onLogout }) {
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: colors.orange, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
             🔄 Düzenli Takip ({allFollowups.length})
+            <button
+              style={{ ...s.btn(deferModeFollowup ? "danger" : "primary"), fontSize: 12, padding: "6px 14px", marginLeft: "auto" }}
+              onClick={() => { setDeferModeFollowup(!deferModeFollowup); setSelectedDeferFollowups([]); }}
+            >
+              {deferModeFollowup ? "✕ İptal" : "📦 Firmaları Devret"}
+            </button>
           </div>
+
+          {/* Followup Defer Panel */}
+          {deferModeFollowup && displayFollowups.length > 0 && (
+            <div style={{ ...s.card, marginBottom: 12, background: "rgba(249, 115, 22, 0.1)", border: `1px solid ${colors.orange}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>
+                  {selectedDeferFollowups.length} firma seçili
+                </span>
+                <button style={{ fontSize: 10, padding: "2px 8px", background: colors.surfaceHover, border: "none", borderRadius: 4, color: colors.text, cursor: "pointer" }} onClick={() => {
+                  if (selectedDeferFollowups.length === displayFollowups.length) {
+                    setSelectedDeferFollowups([]);
+                  } else {
+                    setSelectedDeferFollowups(displayFollowups.map(c => c.id));
+                  }
+                }}>
+                  {selectedDeferFollowups.length === displayFollowups.length ? "Hiçbirini Seçme" : "Tümünü Seç"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 11, color: colors.textMuted }}>Haftaya:</label>
+                  <select style={{ ...s.select, width: 90, fontSize: 11 }} value={deferTargetWeekFollowup} onChange={e => setDeferTargetWeekFollowup(parseInt(e.target.value))}>
+                    {[...Array(16)].map((_, i) => {
+                      const w = currentWeek + 15 - i;
+                      return <option key={w} value={w}>Hafta {w}{w === currentWeek ? " (bu)" : ""}</option>;
+                    })}
+                  </select>
+                </div>
+                <button
+                  style={{ ...s.btn("success"), fontSize: 11, padding: "4px 12px" }}
+                  disabled={selectedDeferFollowups.length === 0}
+                  onClick={() => {
+                    updateData(prev => {
+                      const deferEvents = selectedDeferFollowups.map(cId => ({
+                        id: uid(), type: "defer", companyId: cId,
+                        fromWeek: selectedWeek, toWeek: deferTargetWeekFollowup,
+                        date: new Date().toISOString(), week: selectedWeek, year: currentYear
+                      }));
+                      return {
+                        ...prev,
+                        companies: prev.companies.map(c =>
+                          selectedDeferFollowups.includes(c.id)
+                            ? { ...c, deferredToWeek: deferTargetWeekFollowup }
+                            : c
+                        ),
+                        activityLog: [...(prev.activityLog || []), ...deferEvents]
+                      };
+                    });
+                    showSync(`${selectedDeferFollowups.length} firma Hafta ${deferTargetWeekFollowup}'e devredildi ✓`);
+                    setSelectedDeferFollowups([]);
+                    setDeferModeFollowup(false);
+                  }}
+                >
+                  ✓ Devret ({selectedDeferFollowups.length})
+                </button>
+              </div>
+            </div>
+          )}
+
           {allFollowups.length === 0 ? (
             <div style={{ ...s.card, textAlign: "center", color: colors.textMuted, padding: 20, fontSize: 12 }}>Düzenli takipte firma yok.</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
-              {displayFollowups.map(c => renderCompanyCard(c, "followup"))}
+              {displayFollowups.map(c => {
+                const isSelected = selectedDeferFollowups.includes(c.id);
+                return (
+                  <div key={c.id} style={{ position: "relative" }}>
+                    {deferModeFollowup && (
+                      <div
+                        style={{
+                          position: "absolute", top: 8, left: 8, zIndex: 10,
+                          width: 20, height: 20, borderRadius: 4,
+                          background: isSelected ? colors.orange : colors.surface,
+                          border: `2px solid ${isSelected ? colors.orange : colors.border}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", fontSize: 12, color: "#fff"
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDeferFollowups(prev =>
+                            isSelected ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                          );
+                        }}
+                      >
+                        {isSelected && "✓"}
+                      </div>
+                    )}
+                    {renderCompanyCard(c, "followup")}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
