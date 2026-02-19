@@ -934,6 +934,24 @@ function SalesPipelineApp({ onLogout }) {
     }
   }, []);
 
+  // Migrate: Fix callLog trackingType based on company's CURRENT trackingType
+  useEffect(() => {
+    let needsFix = false;
+    const fixedLogs = data.callLogs.map(l => {
+      const company = data.companies.find(c => c.id === l.companyId);
+      const correctType = company?.trackingType || "target";
+      if (l.trackingType !== correctType) {
+        needsFix = true;
+        return { ...l, trackingType: correctType };
+      }
+      return l;
+    });
+    if (needsFix) {
+      setData(prev => ({ ...prev, callLogs: fixedLogs }));
+      console.log("✅ callLog trackingType'ları düzeltildi");
+    }
+  }, []);
+
   // Scroll company panel to top when switching companies
   useEffect(() => {
     if (expandedFirm) {
@@ -1494,12 +1512,7 @@ function SalesPipelineApp({ onLogout }) {
         if (comp.id === callResult.companyId) {
           const updated = { ...comp };
           if (callResult.result === "meeting") updated.status = "meeting";
-          else if (callResult.result === "introduced") {
-            updated.status = "contact_ready";
-            updated.trackingType = "followup";
-            // Track when company first entered Düzenli Takip
-            if (!updated.followupStartDate) updated.followupStartDate = new Date().toISOString();
-          }
+          else if (callResult.result === "introduced") updated.status = "contact_ready";
           else if (callResult.result === "unreached") updated.status = "unreached";
           else if (callResult.result === "wrong_number") updated.status = "wrong_person";
           else if (callResult.result === "not_interested") updated.status = "not_interested";
