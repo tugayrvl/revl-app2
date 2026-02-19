@@ -1047,7 +1047,7 @@ function SalesPipelineApp({ onLogout }) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: "bottom", labels: { color: "#94a3b8", font: { size: 10 }, boxWidth: 12, padding: 8 } },
-        title: { display: true, text: subtitle ? [title, subtitle] : title, color: "#e2e8f0", font: { size: 12, weight: 600 } },
+        title: { display: true, text: subtitle ? [title, subtitle] : title, color: "#e2e8f0", font: { size: 12, weight: 600 }, padding: { bottom: 16 } },
         datalabels: { color: "#e2e8f0", font: { size: 9, weight: 600 }, anchor: "end", align: "top", offset: -2,
           formatter: (v) => v > 0 ? v : "",
         }
@@ -1071,18 +1071,18 @@ function SalesPipelineApp({ onLogout }) {
           const y = yAxis.top - 18;
           ctx.textAlign = "center";
           ctx.fillStyle = "#e2e8f0";
-          ctx.font = "bold 14px sans-serif";
+          ctx.font = "300 13px system-ui, -apple-system, sans-serif";
           ctx.fillText("%" + pct, x, y);
-          ctx.fillStyle = "#94a3b8";
-          ctx.font = "8px sans-serif";
-          ctx.fillText("dönüşüm", x, y + 10);
+          ctx.fillStyle = "#64748b";
+          ctx.font = "300 7px system-ui, -apple-system, sans-serif";
+          ctx.fillText("dönüşüm", x, y + 9);
         });
       }
     };
     if (chartRef1.current) {
       if (chartInst1.current) chartInst1.current.destroy();
       const opts1 = chartOpts("Hedef Firma Aramaları");
-      opts1.layout.padding.top = 32;
+      opts1.layout.padding.top = 40;
       chartInst1.current = new window.Chart(chartRef1.current, {
         type: "bar", plugins: [conversionPlugin], data: { labels, datasets: [
           { label: "Arama", data: weeklyChartData.map(w => w.targetCalls), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 3 },
