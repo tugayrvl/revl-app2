@@ -1058,25 +1058,17 @@ function SalesPipelineApp({ onLogout }) {
         y: { beginAtZero: true, ticks: { color: "#64748b", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(100,116,139,0.15)" } }
       }
     });
-    // Chart 1: Hedef Firma Aramaları
+    // Chart 1: Tüm Aramalar (Hedef + Takip)
     if (chartRef1.current) {
       if (chartInst1.current) chartInst1.current.destroy();
       chartInst1.current = new window.Chart(chartRef1.current, {
         type: "bar", data: { labels, datasets: [
-          { label: "Arama", data: weeklyChartData.map(w => w.targetCalls), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 3 },
-          { label: "Ulaşılan", data: weeklyChartData.map(w => w.targetReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
+          { label: "Hedef Arama", data: weeklyChartData.map(w => w.targetCalls), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 3 },
+          { label: "Hedef Ulaşılan", data: weeklyChartData.map(w => w.targetReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
           { label: "Takibe Alınan", data: weeklyChartData.map(w => w.movedToFollowup), backgroundColor: "rgba(168,85,247,0.7)", borderRadius: 3 },
-        ]}, options: chartOpts("Hedef Firma Aramaları")
-      });
-    }
-    // Chart 2: Düzenli Takip Aramaları
-    if (chartRef2.current) {
-      if (chartInst2.current) chartInst2.current.destroy();
-      chartInst2.current = new window.Chart(chartRef2.current, {
-        type: "bar", data: { labels, datasets: [
-          { label: "Arama", data: weeklyChartData.map(w => w.followupCalls), backgroundColor: "rgba(249,115,22,0.7)", borderRadius: 3 },
-          { label: "Ulaşılan", data: weeklyChartData.map(w => w.followupReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
-        ]}, options: chartOpts("Düzenli Takip Aramaları")
+          { label: "Takip Arama", data: weeklyChartData.map(w => w.followupCalls), backgroundColor: "rgba(249,115,22,0.7)", borderRadius: 3 },
+          { label: "Takip Ulaşılan", data: weeklyChartData.map(w => w.followupReached), backgroundColor: "rgba(6,182,212,0.7)", borderRadius: 3 },
+        ]}, options: chartOpts("Haftalık Arama Performansı")
       });
     }
     // Chart 3: Operasyonel Metrikler
@@ -1091,7 +1083,6 @@ function SalesPipelineApp({ onLogout }) {
     }
     return () => {
       if (chartInst1.current) chartInst1.current.destroy();
-      if (chartInst2.current) chartInst2.current.destroy();
       if (chartInst3.current) chartInst3.current.destroy();
     };
   }, [weeklyChartData, activeTab]);
@@ -1966,7 +1957,6 @@ function SalesPipelineApp({ onLogout }) {
           </div>
           <div style={{ position: "relative", height: 200 }}><canvas ref={chartRef1} /></div>
         </div>
-        <div style={{ ...s.card, padding: 12 }}><div style={{ position: "relative", height: 200 }}><canvas ref={chartRef2} /></div></div>
         <div style={{ ...s.card, padding: 12 }}><div style={{ position: "relative", height: 200 }}><canvas ref={chartRef3} /></div></div>
       </div>
 
