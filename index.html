@@ -19,6 +19,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0e17; overflow: auto; }
@@ -1013,7 +1014,8 @@ function SalesPipelineApp({ onLogout }) {
   // ---- WEEKLY CHART DATA ----
   const weeklyChartData = useMemo(() => {
     const weeks = [];
-    for (let w = Math.max(1, currentWeek - 6); w <= currentWeek; w++) {
+    const startW = 7 + Math.floor(Math.max(0, currentWeek - 7) / 8) * 8;
+    for (let w = startW; w < startW + 8; w++) {
       const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
       weeks.push({
         week: w,
@@ -1037,12 +1039,20 @@ function SalesPipelineApp({ onLogout }) {
   useEffect(() => {
     if (!window.Chart || activeTab !== "weekly" || weeklyChartData.length === 0) return;
     const labels = weeklyChartData.map(w => `H${w.week}`);
-    const chartOpts = (title) => ({
+    if (window.ChartDataLabels) window.Chart.register(window.ChartDataLabels);
+    const totalCalls = weeklyChartData.reduce((s, w) => s + w.targetCalls, 0);
+    const totalFollowup = weeklyChartData.reduce((s, w) => s + w.movedToFollowup, 0);
+    const followupPct = totalCalls > 0 ? Math.round((totalFollowup / totalCalls) * 100) : 0;
+    const chartOpts = (title, subtitle) => ({
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: "bottom", labels: { color: "#94a3b8", font: { size: 10 }, boxWidth: 12, padding: 8 } },
-        title: { display: true, text: title, color: "#e2e8f0", font: { size: 12, weight: 600 } }
+        title: { display: true, text: subtitle ? [title, subtitle] : title, color: "#e2e8f0", font: { size: 12, weight: 600 } },
+        datalabels: { color: "#e2e8f0", font: { size: 9, weight: 600 }, anchor: "end", align: "top", offset: -2,
+          formatter: (v) => v > 0 ? v : "",
+        }
       },
+      layout: { padding: { top: 16 } },
       scales: {
         x: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "rgba(100,116,139,0.1)" } },
         y: { beginAtZero: true, ticks: { color: "#64748b", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(100,116,139,0.15)" } }
@@ -1056,7 +1066,7 @@ function SalesPipelineApp({ onLogout }) {
           { label: "Arama", data: weeklyChartData.map(w => w.targetCalls), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 3 },
           { label: "Ulaşılan", data: weeklyChartData.map(w => w.targetReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
           { label: "Takibe Alınan", data: weeklyChartData.map(w => w.movedToFollowup), backgroundColor: "rgba(168,85,247,0.7)", borderRadius: 3 },
-        ]}, options: chartOpts("Hedef Firma Aramaları")
+        ]}, options: chartOpts("Hedef Firma Aramaları", `${totalCalls} aramanın %${followupPct}'i takibe alındı`)
       });
     }
     // Chart 2: Düzenli Takip Aramaları
