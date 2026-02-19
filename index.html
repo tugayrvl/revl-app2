@@ -1741,13 +1741,17 @@ function SalesPipelineApp({ onLogout }) {
   }, [sortedWeekCompanies, weekFilter, getContacts]);
 
   // Followup companies for the interleaved call list
+  const followupCatOrder = { active: 0, uncertain: 1, evaluator: 2, passive: 3 };
   const displayFollowups = useMemo(() => {
     return allFollowups.sort((a, b) => {
+      const aCat = followupCatOrder[a.followupCategory] ?? 1;
+      const bCat = followupCatOrder[b.followupCategory] ?? 1;
+      if (aCat !== bCat) return aCat - bCat;
       const aLogs = getCallLogs(a.id);
       const bLogs = getCallLogs(b.id);
       const aLast = aLogs.length > 0 ? new Date(aLogs[0].date) : new Date(0);
       const bLast = bLogs.length > 0 ? new Date(bLogs[0].date) : new Date(0);
-      return aLast - bLast; // en eski aranmış olan en üstte
+      return aLast - bLast;
     });
   }, [allFollowups, getCallLogs]);
 
@@ -1844,7 +1848,12 @@ function SalesPipelineApp({ onLogout }) {
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
             <StatusBadge status={company.status} hasPhoneContact={hasPhone} />
-            {type === "followup" && <Badge color={colors.orange} bg="#3d1e08">Takip</Badge>}
+            {type === "followup" && (() => {
+              const cat = company.followupCategory;
+              const catMap = { active: { label: "Aktif Fırsat", color: colors.green, bg: colors.greenDim }, uncertain: { label: "Belirsiz", color: colors.yellow, bg: "#3d2e08" }, evaluator: { label: "Değerlendiren", color: colors.accent, bg: colors.accentDim }, passive: { label: "Pasif", color: colors.textMuted, bg: colors.surfaceHover } };
+              const c = catMap[cat] || { label: "Takip", color: colors.orange, bg: "#3d1e08" };
+              return <Badge color={c.color} bg={c.bg}>{c.label}</Badge>;
+            })()}
             {type === "followup" && calledThisWeek && <Badge color={colors.green} bg={colors.greenDim}>✓ Arandı</Badge>}
           </div>
           {parent && <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>↳ {parent.name}</div>}
@@ -4950,6 +4959,15 @@ function SalesPipelineApp({ onLogout }) {
                 {[...Array(6)].map((_, i) => (
                   <option key={i} value={currentWeek + i}>H{currentWeek + i}</option>
                 ))}
+              </select>
+            )}
+            {company.trackingType === "followup" && (
+              <select style={s.select} value={company.followupCategory || ""} onChange={(e) => updateCompanyField(company.id, "followupCategory", e.target.value || null)}>
+                <option value="">Takip Kategorisi</option>
+                <option value="active">Aktif Fırsat</option>
+                <option value="uncertain">Belirsiz</option>
+                <option value="evaluator">Genel Değerlendiren</option>
+                <option value="passive">Pasif Müşteri</option>
               </select>
             )}
             <select style={s.select} value={company.status || ""} onChange={(e) => updateCompanyField(company.id, "status", e.target.value || null)}>
