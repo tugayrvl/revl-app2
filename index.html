@@ -1856,12 +1856,11 @@ function SalesPipelineApp({ onLogout }) {
             {weekFilter !== "all" && (
               <button style={{ ...s.btn(), padding: "2px 8px", fontSize: 10 }} onClick={() => setWeekFilter("all")}>✕</button>
             )}
-            <div style={{ flex: 1 }} />
             <button
-              style={{ ...s.btn(deferMode ? "primary" : "default"), fontSize: 11, padding: "4px 10px" }}
+              style={{ ...s.btn(deferMode ? "danger" : "primary"), fontSize: 12, padding: "6px 14px", marginLeft: "auto" }}
               onClick={() => { setDeferMode(!deferMode); setSelectedDeferCompanies([]); }}
             >
-              {deferMode ? "✕ İptal" : "📦 Devret"}
+              {deferMode ? "✕ İptal" : "📦 Firmaları Devret"}
             </button>
           </div>
 
