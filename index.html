@@ -1014,7 +1014,7 @@ function SalesPipelineApp({ onLogout }) {
   // ---- WEEKLY CHART DATA ----
   const weeklyChartData = useMemo(() => {
     const weeks = [];
-    const startW = Math.max(1, currentWeek - 7);
+    const startW = Math.max(1, currentWeek - 11);
     for (let w = startW; w <= currentWeek; w++) {
       const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
       weeks.push({
@@ -1944,7 +1944,7 @@ function SalesPipelineApp({ onLogout }) {
       </div>
 
       {/* CHARTS */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 16 }}>
         <div style={{ ...s.card, padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-around", marginBottom: 4 }}>
             {weeklyChartData.map(w => {
