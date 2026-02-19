@@ -1015,17 +1015,13 @@ function SalesPipelineApp({ onLogout }) {
     const weeks = [];
     for (let i = 7; i >= 0; i--) {
       const w = currentWeek - i;
-      if (w < 1) continue;
+      if (w < 7) continue;
       const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
       weeks.push({
         week: w,
         targetCalls: weekLogs.filter(l => (l.trackingType || "target") === "target").length,
         targetReached: weekLogs.filter(l => (l.trackingType || "target") === "target" && ["introduced","meeting"].includes(l.result)).length,
-        movedToFollowup: data.companies.filter(c => {
-          if (!c.followupStartDate) return false;
-          const d = new Date(c.followupStartDate);
-          return getWeekNumber(d) === w && d.getFullYear() === currentYear;
-        }).length,
+        movedToFollowup: weekLogs.filter(l => (l.trackingType || "target") === "target" && l.result === "introduced").length,
         followupCalls: weekLogs.filter(l => l.trackingType === "followup").length,
         followupReached: weekLogs.filter(l => l.trackingType === "followup" && ["introduced","meeting"].includes(l.result)).length,
         deferred: (data.activityLog || []).filter(e => e.type === "defer" && e.week === w && e.year === currentYear).length,
