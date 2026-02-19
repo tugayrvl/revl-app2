@@ -14,10 +14,10 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0e17; overflow: auto; }
@@ -807,6 +807,11 @@ function SalesPipelineApp({ onLogout }) {
   const [assignWeek, setAssignWeek] = useState(currentWeek);
   const [selectedContact, setSelectedContact] = useState(null); // For contact profile modal
   const [showCallPanel, setShowCallPanel] = useState(false); // Separate state for call panel (can coexist with modals)
+
+  // Defer (devret) state
+  const [deferMode, setDeferMode] = useState(false);
+  const [selectedDeferCompanies, setSelectedDeferCompanies] = useState([]);
+  const [deferTargetWeek, setDeferTargetWeek] = useState(currentWeek + 1);
 
   // Todo form state
   const [showTodoForm, setShowTodoForm] = useState(false);
@@ -1851,12 +1856,95 @@ function SalesPipelineApp({ onLogout }) {
             {weekFilter !== "all" && (
               <button style={{ ...s.btn(), padding: "2px 8px", fontSize: 10 }} onClick={() => setWeekFilter("all")}>✕</button>
             )}
+            <div style={{ flex: 1 }} />
+            <button
+              style={{ ...s.btn(deferMode ? "primary" : "default"), fontSize: 11, padding: "4px 10px" }}
+              onClick={() => { setDeferMode(!deferMode); setSelectedDeferCompanies([]); }}
+            >
+              {deferMode ? "✕ İptal" : "📦 Devret"}
+            </button>
           </div>
+
+          {/* Defer Panel */}
+          {deferMode && displayCompanies.length > 0 && (
+            <div style={{ ...s.card, marginBottom: 12, background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${colors.accent}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>
+                  {selectedDeferCompanies.length} firma seçili
+                </span>
+                <button style={{ fontSize: 10, padding: "2px 8px", background: colors.surfaceHover, border: "none", borderRadius: 4, color: colors.text, cursor: "pointer" }} onClick={() => {
+                  if (selectedDeferCompanies.length === displayCompanies.length) {
+                    setSelectedDeferCompanies([]);
+                  } else {
+                    setSelectedDeferCompanies(displayCompanies.map(c => c.id));
+                  }
+                }}>
+                  {selectedDeferCompanies.length === displayCompanies.length ? "Hiçbirini Seçme" : "Tümünü Seç"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ fontSize: 11, color: colors.textMuted }}>Haftaya:</label>
+                  <select style={{ ...s.select, width: 90, fontSize: 11 }} value={deferTargetWeek} onChange={e => setDeferTargetWeek(parseInt(e.target.value))}>
+                    {[...Array(16)].map((_, i) => {
+                      const w = currentWeek + i;
+                      return <option key={w} value={w}>Hafta {w}{w === currentWeek ? " (bu)" : ""}</option>;
+                    })}
+                  </select>
+                </div>
+                <button
+                  style={{ ...s.btn("success"), fontSize: 11, padding: "4px 12px" }}
+                  disabled={selectedDeferCompanies.length === 0}
+                  onClick={() => {
+                    updateData(prev => ({
+                      ...prev,
+                      companies: prev.companies.map(c =>
+                        selectedDeferCompanies.includes(c.id)
+                          ? { ...c, targetWeek: deferTargetWeek, targetYear: currentYear }
+                          : c
+                      )
+                    }));
+                    showSync(`${selectedDeferCompanies.length} firma Hafta ${deferTargetWeek}'e devredildi ✓`);
+                    setSelectedDeferCompanies([]);
+                    setDeferMode(false);
+                  }}
+                >
+                  ✓ Devret ({selectedDeferCompanies.length})
+                </button>
+              </div>
+            </div>
+          )}
+
           {displayCompanies.length === 0 ? (
             <div style={{ ...s.card, textAlign: "center", color: colors.textMuted, padding: 20, fontSize: 12 }}>Bu haftada henüz firma yok.</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-              {displayCompanies.map(c => renderCompanyCard(c, "target"))}
+              {displayCompanies.map(c => {
+                const isSelected = selectedDeferCompanies.includes(c.id);
+                return (
+                  <div key={c.id} style={{ position: "relative" }}>
+                    {deferMode && (
+                      <div
+                        style={{
+                          position: "absolute", top: 8, left: 8, zIndex: 10,
+                          width: 20, height: 20, borderRadius: 4,
+                          background: isSelected ? colors.accent : colors.surface,
+                          border: `2px solid ${isSelected ? colors.accent : colors.border}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", fontSize: 12, color: "#fff"
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDeferCompanies(prev =>
+                            isSelected ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                          );
+                        }}
+                      >
+                        {isSelected && "✓"}
+                      </div>
+                    )}
+                    {renderCompanyCard(c, "target")}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
