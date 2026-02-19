@@ -1846,15 +1846,15 @@ function SalesPipelineApp({ onLogout }) {
               <Badge color={colors.red} bg={colors.redDim}>Kontakt Yok</Badge>
             )}
           </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6, alignItems: "center" }}>
             <StatusBadge status={company.status} hasPhoneContact={hasPhone} />
+            {type === "followup" && calledThisWeek && <Badge color={colors.green} bg={colors.greenDim}>✓ Arandı</Badge>}
             {type === "followup" && (() => {
               const cat = company.followupCategory;
               const catMap = { active: { label: "Aktif Fırsat", color: colors.green, bg: colors.greenDim }, uncertain: { label: "Belirsiz", color: colors.yellow, bg: "#3d2e08" }, evaluator: { label: "Değerlendiren", color: colors.accent, bg: colors.accentDim }, passive: { label: "Pasif", color: colors.textMuted, bg: colors.surfaceHover } };
               const c = catMap[cat] || { label: "Takip", color: colors.orange, bg: "#3d1e08" };
-              return <Badge color={c.color} bg={c.bg}>{c.label}</Badge>;
+              return <span style={{ marginLeft: "auto" }}><Badge color={c.color} bg={c.bg}>{c.label}</Badge></span>;
             })()}
-            {type === "followup" && calledThisWeek && <Badge color={colors.green} bg={colors.greenDim}>✓ Arandı</Badge>}
           </div>
           {parent && <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>↳ {parent.name}</div>}
           {company.deviceStatus && company.deviceStatus !== "unknown" && (
