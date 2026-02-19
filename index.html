@@ -18,6 +18,7 @@
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0e17; overflow: auto; }
@@ -454,6 +455,7 @@ const defaultData = () => ({
   excelImports: [],
   fuzzyBlacklist: [],
   demoProcesses: [],
+  activityLog: [],
 });
 
 // LocalStorage functions (fallback)
@@ -813,6 +815,14 @@ function SalesPipelineApp({ onLogout }) {
   const [selectedDeferCompanies, setSelectedDeferCompanies] = useState([]);
   const [deferTargetWeek, setDeferTargetWeek] = useState(currentWeek + 1);
 
+  // Chart refs
+  const chartRef1 = useRef(null);
+  const chartRef2 = useRef(null);
+  const chartRef3 = useRef(null);
+  const chartInst1 = useRef(null);
+  const chartInst2 = useRef(null);
+  const chartInst3 = useRef(null);
+
   // Todo form state
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [newTodoText, setNewTodoText] = useState("");
@@ -999,6 +1009,88 @@ function SalesPipelineApp({ onLogout }) {
       weekFollowups: allFollowups.length,
     };
   }, [data, weekCompanies, selectedWeek]);
+
+  // ---- WEEKLY CHART DATA ----
+  const weeklyChartData = useMemo(() => {
+    const weeks = [];
+    for (let i = 7; i >= 0; i--) {
+      const w = currentWeek - i;
+      if (w < 1) continue;
+      const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
+      weeks.push({
+        week: w,
+        targetCalls: weekLogs.filter(l => (l.trackingType || "target") === "target").length,
+        targetReached: weekLogs.filter(l => (l.trackingType || "target") === "target" && ["introduced","meeting"].includes(l.result)).length,
+        movedToFollowup: data.companies.filter(c => {
+          if (!c.followupStartDate) return false;
+          const d = new Date(c.followupStartDate);
+          return getWeekNumber(d) === w && d.getFullYear() === currentYear;
+        }).length,
+        followupCalls: weekLogs.filter(l => l.trackingType === "followup").length,
+        followupReached: weekLogs.filter(l => l.trackingType === "followup" && ["introduced","meeting"].includes(l.result)).length,
+        deferred: (data.activityLog || []).filter(e => e.type === "defer" && e.week === w && e.year === currentYear).length,
+        newPhones: data.contacts.filter(c => {
+          if (!c.phone || !c.createdAt) return false;
+          const d = new Date(c.createdAt);
+          return getWeekNumber(d) === w && d.getFullYear() === currentYear;
+        }).length,
+      });
+    }
+    return weeks;
+  }, [data, currentWeek, currentYear]);
+
+  // ---- CHART.JS RENDERING ----
+  useEffect(() => {
+    if (!window.Chart || activeTab !== "weekly" || weeklyChartData.length === 0) return;
+    const labels = weeklyChartData.map(w => `H${w.week}`);
+    const chartOpts = (title) => ({
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { color: "#94a3b8", font: { size: 10 }, boxWidth: 12, padding: 8 } },
+        title: { display: true, text: title, color: "#e2e8f0", font: { size: 12, weight: 600 } }
+      },
+      scales: {
+        x: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "rgba(100,116,139,0.1)" } },
+        y: { beginAtZero: true, ticks: { color: "#64748b", font: { size: 10 }, stepSize: 1 }, grid: { color: "rgba(100,116,139,0.15)" } }
+      }
+    });
+    // Chart 1: Hedef Firma Aramaları
+    if (chartRef1.current) {
+      if (chartInst1.current) chartInst1.current.destroy();
+      chartInst1.current = new window.Chart(chartRef1.current, {
+        type: "bar", data: { labels, datasets: [
+          { label: "Arama", data: weeklyChartData.map(w => w.targetCalls), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 3 },
+          { label: "Ulaşılan", data: weeklyChartData.map(w => w.targetReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
+          { label: "Takibe Alınan", data: weeklyChartData.map(w => w.movedToFollowup), backgroundColor: "rgba(168,85,247,0.7)", borderRadius: 3 },
+        ]}, options: chartOpts("Hedef Firma Aramaları")
+      });
+    }
+    // Chart 2: Düzenli Takip Aramaları
+    if (chartRef2.current) {
+      if (chartInst2.current) chartInst2.current.destroy();
+      chartInst2.current = new window.Chart(chartRef2.current, {
+        type: "bar", data: { labels, datasets: [
+          { label: "Arama", data: weeklyChartData.map(w => w.followupCalls), backgroundColor: "rgba(249,115,22,0.7)", borderRadius: 3 },
+          { label: "Ulaşılan", data: weeklyChartData.map(w => w.followupReached), backgroundColor: "rgba(34,197,94,0.7)", borderRadius: 3 },
+        ]}, options: chartOpts("Düzenli Takip Aramaları")
+      });
+    }
+    // Chart 3: Operasyonel Metrikler
+    if (chartRef3.current) {
+      if (chartInst3.current) chartInst3.current.destroy();
+      chartInst3.current = new window.Chart(chartRef3.current, {
+        type: "bar", data: { labels, datasets: [
+          { label: "Devredilen Firma", data: weeklyChartData.map(w => w.deferred), backgroundColor: "rgba(239,68,68,0.7)", borderRadius: 3 },
+          { label: "Yeni Telefon", data: weeklyChartData.map(w => w.newPhones), backgroundColor: "rgba(6,182,212,0.7)", borderRadius: 3 },
+        ]}, options: chartOpts("Haftalık Operasyonel")
+      });
+    }
+    return () => {
+      if (chartInst1.current) chartInst1.current.destroy();
+      if (chartInst2.current) chartInst2.current.destroy();
+      if (chartInst3.current) chartInst3.current.destroy();
+    };
+  }, [weeklyChartData, activeTab]);
 
   // ---- FIRM SORTING (for weekly view) ----
   const sortedWeekCompanies = useMemo(() => {
@@ -1368,7 +1460,8 @@ function SalesPipelineApp({ onLogout }) {
 
   const saveCallLog = () => {
     updateData(prev => {
-      const next = { ...prev, callLogs: [...prev.callLogs, { ...callResult, id: uid() }] };
+      const company = prev.companies.find(c => c.id === callResult.companyId);
+      const next = { ...prev, callLogs: [...prev.callLogs, { ...callResult, id: uid(), trackingType: company?.trackingType || "target" }] };
       // Update company status - create new companies array with updated company
       next.companies = prev.companies.map(comp => {
         if (comp.id === callResult.companyId) {
@@ -1776,7 +1869,15 @@ function SalesPipelineApp({ onLogout }) {
                   onChange={(e) => {
                     const weeks = parseInt(e.target.value);
                     if (weeks > 0) {
-                      updateCompanyField(company.id, "deferredToWeek", selectedWeek + weeks);
+                      updateData(prev => ({
+                        ...prev,
+                        companies: prev.companies.map(c => c.id === company.id ? { ...c, deferredToWeek: selectedWeek + weeks } : c),
+                        activityLog: [...(prev.activityLog || []), {
+                          id: uid(), type: "defer", companyId: company.id,
+                          fromWeek: selectedWeek, toWeek: selectedWeek + weeks,
+                          date: new Date().toISOString(), week: selectedWeek, year: currentYear
+                        }]
+                      }));
                       showSync(`Firma H${selectedWeek + weeks}'e devredildi ✓`);
                     }
                     setDeferDropdown(null);
@@ -1847,6 +1948,13 @@ function SalesPipelineApp({ onLogout }) {
         ))}
       </div>
 
+      {/* CHARTS */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <div style={{ ...s.card, padding: 12 }}><canvas ref={chartRef1} style={{ width: "100%", height: 200 }} /></div>
+        <div style={{ ...s.card, padding: 12 }}><canvas ref={chartRef2} style={{ width: "100%", height: 200 }} /></div>
+        <div style={{ ...s.card, padding: 12 }}><canvas ref={chartRef3} style={{ width: "100%", height: 200 }} /></div>
+      </div>
+
       {/* TWO COLUMN LAYOUT: Hedef (left) + Düzenli Takip (right) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 20 }}>
         {/* LEFT: Hedef Firmalar */}
@@ -1884,7 +1992,7 @@ function SalesPipelineApp({ onLogout }) {
                   <label style={{ fontSize: 11, color: colors.textMuted }}>Haftaya:</label>
                   <select style={{ ...s.select, width: 90, fontSize: 11 }} value={deferTargetWeek} onChange={e => setDeferTargetWeek(parseInt(e.target.value))}>
                     {[...Array(16)].map((_, i) => {
-                      const w = currentWeek + i;
+                      const w = currentWeek + 15 - i;
                       return <option key={w} value={w}>Hafta {w}{w === currentWeek ? " (bu)" : ""}</option>;
                     })}
                   </select>
@@ -1893,14 +2001,22 @@ function SalesPipelineApp({ onLogout }) {
                   style={{ ...s.btn("success"), fontSize: 11, padding: "4px 12px" }}
                   disabled={selectedDeferCompanies.length === 0}
                   onClick={() => {
-                    updateData(prev => ({
-                      ...prev,
-                      companies: prev.companies.map(c =>
-                        selectedDeferCompanies.includes(c.id)
-                          ? { ...c, targetWeek: deferTargetWeek, targetYear: currentYear }
-                          : c
-                      )
-                    }));
+                    updateData(prev => {
+                      const deferEvents = selectedDeferCompanies.map(cId => ({
+                        id: uid(), type: "defer", companyId: cId,
+                        fromWeek: selectedWeek, toWeek: deferTargetWeek,
+                        date: new Date().toISOString(), week: selectedWeek, year: currentYear
+                      }));
+                      return {
+                        ...prev,
+                        companies: prev.companies.map(c =>
+                          selectedDeferCompanies.includes(c.id)
+                            ? { ...c, targetWeek: deferTargetWeek, targetYear: currentYear }
+                            : c
+                        ),
+                        activityLog: [...(prev.activityLog || []), ...deferEvents]
+                      };
+                    });
                     showSync(`${selectedDeferCompanies.length} firma Hafta ${deferTargetWeek}'e devredildi ✓`);
                     setSelectedDeferCompanies([]);
                     setDeferMode(false);
