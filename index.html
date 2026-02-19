@@ -1014,8 +1014,8 @@ function SalesPipelineApp({ onLogout }) {
   // ---- WEEKLY CHART DATA ----
   const weeklyChartData = useMemo(() => {
     const weeks = [];
-    const startW = 7 + Math.floor(Math.max(0, currentWeek - 7) / 8) * 8;
-    for (let w = startW; w < startW + 8; w++) {
+    const startW = Math.max(1, currentWeek - 7);
+    for (let w = startW; w <= currentWeek; w++) {
       const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
       weeks.push({
         week: w,
