@@ -538,6 +538,8 @@ const syncTablesToSupabase = (data) => {
           device_brand: c.deviceBrand || null,
           website: c.website || null,
           notes: c.notes || null,
+          followup_category: c.followupCategory || null,
+          deferred_to_week: c.deferredToWeek || null,
           meta: c
         }));
         await supabaseClient.from('companies').upsert(batch, { onConflict: 'id' });
@@ -585,9 +587,35 @@ const syncTablesToSupabase = (data) => {
           result: l.result || null,
           notes: l.notes || null,
           date: l.date || null,
+          tracking_type: l.trackingType || null,
           meta: l
         }));
         await supabaseClient.from('call_logs').upsert(batch, { onConflict: 'id' });
+      }
+
+      // Sync activity_log
+      const existingActivity = await supabaseClient.from('activity_log').select('id');
+      const existingActivityIds = new Set((existingActivity.data || []).map(a => a.id));
+      const currentActivityIds = new Set((data.activityLog || []).map(a => a.id));
+
+      const deletedActivityIds = [...existingActivityIds].filter(id => !currentActivityIds.has(id));
+      if (deletedActivityIds.length > 0) {
+        await supabaseClient.from('activity_log').delete().in('id', deletedActivityIds);
+      }
+
+      if (data.activityLog?.length > 0) {
+        const batch = data.activityLog.map(a => ({
+          id: a.id,
+          type: a.type || null,
+          company_id: a.companyId || null,
+          from_week: a.fromWeek || null,
+          to_week: a.toWeek || null,
+          date: a.date || null,
+          week: a.week || null,
+          year: a.year || null,
+          meta: a
+        }));
+        await supabaseClient.from('activity_log').upsert(batch, { onConflict: 'id' });
       }
 
       console.log('Tables synced ✓');
