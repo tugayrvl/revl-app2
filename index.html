@@ -5021,9 +5021,9 @@ function SalesPipelineApp({ onLogout }) {
                 <span style={{ fontSize: 11, color: colors.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ct.title || ""}>
                   {ct.title || "—"}
                 </span>
-                {/* 4. Telefon Numaraları - Alt Alta */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {ct.phone ? (
+                {/* 4. Telefon Numaraları */}
+                {ct.phone ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     <button
                       style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }}
                       onClick={() => {
@@ -5033,19 +5033,19 @@ function SalesPipelineApp({ onLogout }) {
                     >
                       📞 {ct.phone}
                     </button>
-                  ) : <span style={{ fontSize: 10, color: colors.textDim }}>—</span>}
-                  {ct.phone2 && (
-                    <button
-                      style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }}
-                      onClick={() => {
-                        setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone2, result: "", notes: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
-                        setShowCallPanel(true);
-                      }}
-                    >
-                      📞 {ct.phone2}
-                    </button>
-                  )}
-                </div>
+                    {ct.phone2 && (
+                      <button
+                        style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }}
+                        onClick={() => {
+                          setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone2, result: "", notes: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
+                          setShowCallPanel(true);
+                        }}
+                      >
+                        📞 {ct.phone2}
+                      </button>
+                    )}
+                  </div>
+                ) : <span style={{ fontSize: 10, color: colors.textDim }}>—</span>}
                 {/* 5. Email */}
                 <span style={{ fontSize: 11, color: ct.email ? colors.yellow : colors.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ct.email || "Email yok"}>
                   {ct.email ? `✉️ ${ct.email}` : "—"}
