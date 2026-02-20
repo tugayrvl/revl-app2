@@ -389,6 +389,22 @@ const getWeekNumber = (d = new Date()) => {
 const currentWeek = getWeekNumber();
 const currentYear = new Date().getFullYear();
 
+// Resolve a company's trackingType at a specific date using trackingHistory
+const getTrackingTypeAt = (company, dateStr) => {
+  const history = company?.trackingHistory;
+  if (!history || history.length === 0) return company?.trackingType || "target";
+  const ts = new Date(dateStr).getTime();
+  let result = history[0]?.type || "target";
+  for (const entry of history) {
+    if (new Date(entry.from).getTime() <= ts) {
+      result = entry.type;
+    } else {
+      break;
+    }
+  }
+  return result;
+};
+
 const getWeekDates = (week, year = currentYear) => {
   const jan1 = new Date(year, 0, 1);
   const days = (week - 1) * 7;
@@ -934,21 +950,32 @@ function SalesPipelineApp({ onLogout }) {
     }
   }, []);
 
-  // Migrate: Fix callLog trackingType based on company's CURRENT trackingType
+  // Migrate: Build trackingHistory for existing companies
   useEffect(() => {
-    let needsFix = false;
-    const fixedLogs = data.callLogs.map(l => {
-      const company = data.companies.find(c => c.id === l.companyId);
-      const correctType = company?.trackingType || "target";
-      if (l.trackingType !== correctType) {
-        needsFix = true;
-        return { ...l, trackingType: correctType };
+    let needsMigration = false;
+    const migratedCompanies = data.companies.map(c => {
+      if (c.trackingHistory) return c; // already migrated
+      needsMigration = true;
+      const history = [];
+      const createdAt = c.createdAt || "2025-01-01T00:00:00.000Z";
+      // Company started as target (or whatever its initial state was)
+      if (c.trackingType === "followup" && c.followupStartDate) {
+        // Was target first, then moved to followup at followupStartDate
+        history.push({ type: "target", from: createdAt });
+        history.push({ type: "followup", from: c.followupStartDate });
+      } else if (c.trackingType === "followup") {
+        // Followup but no date — use createdAt as best guess
+        history.push({ type: "followup", from: createdAt });
+      } else if (c.trackingType === "target") {
+        history.push({ type: "target", from: createdAt });
+      } else {
+        history.push({ type: "target", from: createdAt });
       }
-      return l;
+      return { ...c, trackingHistory: history };
     });
-    if (needsFix) {
-      setData(prev => ({ ...prev, callLogs: fixedLogs }));
-      console.log("✅ callLog trackingType'ları düzeltildi");
+    if (needsMigration) {
+      setData(prev => ({ ...prev, companies: migratedCompanies }));
+      console.log("✅ trackingHistory oluşturuldu");
     }
   }, []);
 
@@ -1067,13 +1094,19 @@ function SalesPipelineApp({ onLogout }) {
     const startW = Math.max(1, currentWeek - 11);
     for (let w = startW; w <= currentWeek; w++) {
       const weekLogs = data.callLogs.filter(l => l.week === w && l.year === currentYear);
+      // Resolve each callLog's effective trackingType from company history
+      const resolvedLogs = weekLogs.map(l => {
+        const company = data.companies.find(c => c.id === l.companyId);
+        const effectiveType = getTrackingTypeAt(company, l.date);
+        return { ...l, _effectiveType: effectiveType };
+      });
       weeks.push({
         week: w,
-        targetCalls: weekLogs.filter(l => (l.trackingType || "target") === "target").length,
-        targetReached: weekLogs.filter(l => (l.trackingType || "target") === "target" && ["introduced","meeting"].includes(l.result)).length,
-        movedToFollowup: weekLogs.filter(l => (l.trackingType || "target") === "target" && l.result === "introduced").length,
-        followupCalls: weekLogs.filter(l => l.trackingType === "followup").length,
-        followupReached: weekLogs.filter(l => l.trackingType === "followup" && ["introduced","meeting"].includes(l.result)).length,
+        targetCalls: resolvedLogs.filter(l => l._effectiveType === "target").length,
+        targetReached: resolvedLogs.filter(l => l._effectiveType === "target" && ["introduced","meeting"].includes(l.result)).length,
+        movedToFollowup: resolvedLogs.filter(l => l._effectiveType === "target" && l.result === "introduced").length,
+        followupCalls: resolvedLogs.filter(l => l._effectiveType === "followup").length,
+        followupReached: resolvedLogs.filter(l => l._effectiveType === "followup" && ["introduced","meeting"].includes(l.result)).length,
         deferred: (data.activityLog || []).filter(e => e.type === "defer" && e.week === w && e.year === currentYear).length,
         newPhones: data.contacts.filter(c => {
           if (!c.phone || !c.createdAt) return false;
@@ -1506,7 +1539,8 @@ function SalesPipelineApp({ onLogout }) {
   const saveCallLog = () => {
     updateData(prev => {
       const company = prev.companies.find(c => c.id === callResult.companyId);
-      const next = { ...prev, callLogs: [...prev.callLogs, { ...callResult, id: uid(), trackingType: company?.trackingType || "target" }] };
+      const effectiveType = getTrackingTypeAt(company, callResult.date);
+      const next = { ...prev, callLogs: [...prev.callLogs, { ...callResult, id: uid(), trackingType: effectiveType }] };
       // Update company status - create new companies array with updated company
       next.companies = prev.companies.map(comp => {
         if (comp.id === callResult.companyId) {
@@ -1635,6 +1669,12 @@ function SalesPipelineApp({ onLogout }) {
         // Track when company first enters Düzenli Takip
         if (field === "trackingType" && value === "followup" && !c.followupStartDate) {
           updated.followupStartDate = new Date().toISOString();
+        }
+        // Log trackingType transition to history
+        if (field === "trackingType" && value !== c.trackingType) {
+          const history = [...(c.trackingHistory || [])];
+          history.push({ type: value || "none", from: new Date().toISOString() });
+          updated.trackingHistory = history;
         }
         return updated;
       })
