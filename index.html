@@ -473,6 +473,8 @@ const defaultData = () => ({
   fuzzyBlacklist: [],
   demoProcesses: [],
   activityLog: [],
+  weeklyMentality: {},
+  callStyleNotes: [],
 });
 
 // LocalStorage functions (fallback)
@@ -1540,7 +1542,7 @@ function SalesPipelineApp({ onLogout }) {
   };
 
   const openCallLog = (company, contact) => {
-    setCallResult({ companyId: company.id, contactId: contact.id, contactName: contact.name, companyName: company.name, phone: contact.phone, result: "", notes: "", meetingDate: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
+    setCallResult({ companyId: company.id, contactId: contact.id, contactName: contact.name, companyName: company.name, phone: contact.phone, result: "", notes: "", contactNotes: "", askLater: "", callStyleNote: "", meetingDate: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
     setShowCallPanel(true);
   };
 
@@ -1568,6 +1570,18 @@ function SalesPipelineApp({ onLogout }) {
         next.contacts = prev.contacts.map(c =>
           c.id === callResult.contactId ? { ...c, reached: true, reachedAt: new Date().toISOString() } : c
         );
+      }
+      // Save call style note if provided
+      if (callResult.callStyleNote && callResult.callStyleNote.trim()) {
+        next.callStyleNotes = [...(prev.callStyleNotes || []), {
+          id: uid(),
+          text: callResult.callStyleNote.trim(),
+          date: new Date().toISOString(),
+          week: selectedWeek,
+          year: currentYear,
+          companyName: callResult.companyName,
+          contactName: callResult.contactName,
+        }];
       }
       // Add WhatsApp to-do if checked
       if (callResult.sendWhatsApp) {
@@ -1961,6 +1975,27 @@ function SalesPipelineApp({ onLogout }) {
     );
   };
 
+  // Weekly mentality
+  const weekMentalityKey = `${currentYear}-W${selectedWeek}`;
+  const weekMentality = (data.weeklyMentality || {})[weekMentalityKey] || "";
+  const [editingMentality, setEditingMentality] = useState(false);
+  const [mentalityDraft, setMentalityDraft] = useState("");
+
+  const saveMentality = () => {
+    updateData(prev => ({
+      ...prev,
+      weeklyMentality: { ...(prev.weeklyMentality || {}), [weekMentalityKey]: mentalityDraft }
+    }));
+    setEditingMentality(false);
+  };
+
+  // Weekly call logs for summary
+  const weekCallLogs = useMemo(() =>
+    data.callLogs.filter(l => l.week === selectedWeek && l.year === currentYear)
+      .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [data.callLogs, selectedWeek]
+  );
+
   const renderWeeklyView = () => (
     <div>
       {/* Week Selector with Date Range */}
@@ -1972,6 +2007,31 @@ function SalesPipelineApp({ onLogout }) {
         </div>
         <button style={s.btn()} onClick={() => { setSelectedWeek(w => Math.min(53, w + 1)); setWeekFilter("all"); }}>▶</button>
         {selectedWeek !== currentWeek && <button style={s.btn("primary")} onClick={() => { setSelectedWeek(currentWeek); setWeekFilter("all"); }}>Bu Hafta</button>}
+      </div>
+
+      {/* Weekly Mentality */}
+      <div style={{ ...s.card, borderLeft: "3px solid #a855f7", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editingMentality || weekMentality ? 8 : 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#a855f7", letterSpacing: "0.05em" }}>🧠 HAFTANIN MENTALİTESİ</span>
+          {!editingMentality && (
+            <button style={{ ...s.btn(), padding: "3px 8px", fontSize: 10 }} onClick={() => { setMentalityDraft(weekMentality); setEditingMentality(true); }}>
+              ✏️ {weekMentality ? "Düzenle" : "Yaz"}
+            </button>
+          )}
+        </div>
+        {editingMentality ? (
+          <div>
+            <textarea style={{ ...s.input, height: 60, borderColor: "rgba(168,85,247,0.3)" }} value={mentalityDraft} onChange={e => setMentalityDraft(e.target.value)} placeholder="Bu haftanın odak noktası, yaklaşımı, mentalitesi..." autoFocus />
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <button style={s.btn("primary")} onClick={saveMentality}>Kaydet</button>
+              <button style={s.btn()} onClick={() => setEditingMentality(false)}>İptal</button>
+            </div>
+          </div>
+        ) : weekMentality ? (
+          <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{weekMentality}</div>
+        ) : (
+          <div style={{ fontSize: 11, color: colors.textDim }}>Bu hafta için henüz bir mentalite notu yazılmamış.</div>
+        )}
       </div>
 
       {/* Clickable Stats Row */}
@@ -2232,6 +2292,54 @@ function SalesPipelineApp({ onLogout }) {
           )}
         </div>
       </div>
+
+      {/* ─── HAFTANIN ARAMALARI ─── */}
+      {weekCallLogs.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: colors.yellow, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            📋 Haftanın Aramaları ({weekCallLogs.length})
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  <th style={s.th}>Tarih</th>
+                  <th style={s.th}>Kişi</th>
+                  <th style={s.th}>Firma</th>
+                  <th style={s.th}>Sonuç</th>
+                  <th style={s.th}>Görüşme Notu</th>
+                  <th style={s.th}>Kişi Notu</th>
+                  <th style={{ ...s.th, color: "#eab308" }}>Sonrasında Sor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekCallLogs.map(log => {
+                  const resultMap = {
+                    meeting: { label: "Toplantı", color: colors.green, bg: colors.greenDim },
+                    introduced: { label: "Ulaşıldı", color: colors.yellow, bg: colors.yellowDim },
+                    busy: { label: "Meşgul", color: colors.orange, bg: "#3d1e08" },
+                    unreached: { label: "Ulaşılamadı", color: colors.red, bg: colors.redDim },
+                    wrong_number: { label: "Yanlış No", color: colors.orange, bg: "#3d1e08" },
+                    not_interested: { label: "İlgilenmiyor", color: colors.textDim, bg: colors.surfaceHover },
+                  };
+                  const r = resultMap[log.result] || { label: log.result || "—", color: colors.textMuted, bg: colors.surfaceHover };
+                  return (
+                    <tr key={log.id}>
+                      <td style={{ ...s.td, whiteSpace: "nowrap", fontSize: 11, color: colors.textDim }}>{new Date(log.date).toLocaleDateString("tr")}</td>
+                      <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{log.contactName}</td>
+                      <td style={{ ...s.td, fontSize: 12, color: colors.textMuted }}>{log.companyName}</td>
+                      <td style={s.td}><Badge color={r.color} bg={r.bg}>{r.label}</Badge></td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200 }}>{log.notes || "—"}</td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200, color: colors.textMuted }}>{log.contactNotes || "—"}</td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200, color: log.askLater ? "#eab308" : colors.textDim }}>{log.askLater || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -5402,8 +5510,8 @@ function SalesPipelineApp({ onLogout }) {
                   <span style={{ fontSize: 11, color: colors.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ct.title || ""}>{ct.title || "—"}</span>
                   {ct.phone ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <button style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }} onClick={() => { setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone, result: "", notes: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear }); setShowCallPanel(true); }}>📞 {ct.phone}</button>
-                      {ct.phone2 && <button style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }} onClick={() => { setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone2, result: "", notes: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear }); setShowCallPanel(true); }}>📞 {ct.phone2}</button>}
+                      <button style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }} onClick={() => { setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone, result: "", notes: "", contactNotes: "", askLater: "", callStyleNote: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear }); setShowCallPanel(true); }}>📞 {ct.phone}</button>
+                      {ct.phone2 && <button style={{ ...s.btn("success"), fontSize: 10, padding: "3px 6px", width: "100%" }} onClick={() => { setCallResult({ companyId: company.id, contactId: ct.id, contactName: ct.name, companyName: company.name, phone: ct.phone2, result: "", notes: "", contactNotes: "", askLater: "", callStyleNote: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear }); setShowCallPanel(true); }}>📞 {ct.phone2}</button>}
                     </div>
                   ) : <span style={{ fontSize: 10, color: colors.textDim }}>—</span>}
                   <span style={{ fontSize: 11, color: ct.email ? colors.yellow : colors.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ct.email || ""}>{ct.email ? `✉️ ${ct.email}` : "—"}</span>
@@ -5453,6 +5561,52 @@ function SalesPipelineApp({ onLogout }) {
   // ============================================================
   // CALL PANEL (SAĞ)
   // ============================================================
+
+  // ============================================================
+  // RENDER: GUIDE (Call Style Notes)
+  // ============================================================
+
+  const renderGuide = () => {
+    const notes = (data.callStyleNotes || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const byWeek = {};
+    notes.forEach(n => {
+      const key = `${n.year || currentYear}-W${n.week || "?"}`;
+      if (!byWeek[key]) byWeek[key] = [];
+      byWeek[key].push(n);
+    });
+
+    return (
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>📝 Arama Stilim — Gelişim Rehberi</div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 20 }}>Her aramadan sonra aldığın kişisel notlar burada birikiyor. Scroll ederek okuyup kendi gelişim sürecini takip et.</div>
+
+        {notes.length === 0 ? (
+          <div style={{ ...s.card, textAlign: "center", color: colors.textMuted, padding: 40 }}>
+            Henüz arama stili notu yok. Arama yaptıktan sonra "Arama Stili Notum" alanını doldurunca burada birikmeye başlayacak.
+          </div>
+        ) : (
+          Object.entries(byWeek).map(([weekKey, weekNotes]) => (
+            <div key={weekKey} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a855f7", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ background: "rgba(168,85,247,0.15)", padding: "2px 10px", borderRadius: 4 }}>📅 {weekKey}</span>
+                <span style={{ fontSize: 11, fontWeight: 400, color: colors.textDim }}>{weekNotes.length} not</span>
+              </div>
+              {weekNotes.map(note => (
+                <div key={note.id} style={{ ...s.card, borderLeft: "3px solid #a855f7", padding: "12px 16px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{note.text}</div>
+                  <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 10, color: colors.textDim }}>
+                    <span>{new Date(note.date).toLocaleDateString("tr")} {new Date(note.date).toLocaleTimeString("tr", { hour: "2-digit", minute: "2-digit" })}</span>
+                    {note.companyName && <span>→ {note.companyName}</span>}
+                    {note.contactName && <span>({note.contactName})</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
 
   const renderCallPanel = () => {
     if (!showCallPanel || !callResult) return null;
@@ -5526,8 +5680,24 @@ function SalesPipelineApp({ onLogout }) {
             </div>
           </div>
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 11, color: colors.textMuted }}>Not</label>
-            <textarea style={{ ...s.input, height: 80, marginTop: 4 }} value={callResult.notes || ""} onChange={e => setCallResult({ ...callResult, notes: e.target.value })} placeholder="Görüşme notları..." />
+            <label style={{ fontSize: 11, color: colors.textMuted }}>Görüşme Notu</label>
+            <textarea style={{ ...s.input, height: 60, marginTop: 4 }} value={callResult.notes || ""} onChange={e => setCallResult({ ...callResult, notes: e.target.value })} placeholder="Görüşmede ne konuşuldu..." />
+          </div>
+          {(callResult.result === "introduced" || callResult.result === "meeting") && (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, color: colors.textMuted }}>Kişi Hakkında Not</label>
+                <textarea style={{ ...s.input, height: 50, marginTop: 4 }} value={callResult.contactNotes || ""} onChange={e => setCallResult({ ...callResult, contactNotes: e.target.value })} placeholder="Bu kişi hakkında hatırlanacak detaylar..." />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, color: "#eab308" }}>🔖 Sonrasında Sor</label>
+                <textarea style={{ ...s.input, height: 50, marginTop: 4, borderColor: "rgba(234,179,8,0.3)" }} value={callResult.askLater || ""} onChange={e => setCallResult({ ...callResult, askLater: e.target.value })} placeholder="Bir sonraki aramada sorulacak şeyler..." />
+              </div>
+            </>
+          )}
+          <div style={{ marginBottom: 12, borderTop: `1px solid ${colors.border}`, paddingTop: 10 }}>
+            <label style={{ fontSize: 11, color: "#a855f7" }}>📝 Arama Stili Notum (kişisel gelişim)</label>
+            <textarea style={{ ...s.input, height: 50, marginTop: 4, borderColor: "rgba(168,85,247,0.3)" }} value={callResult.callStyleNote || ""} onChange={e => setCallResult({ ...callResult, callStyleNote: e.target.value })} placeholder="Bu aramada ne iyi gitti, ne yapmalıydım, kendime not..." />
           </div>
           <button style={{ ...s.btn("primary"), width: "100%" }} onClick={saveCallLog} disabled={!callResult.result}>Kaydet</button>
         </div>
@@ -5556,6 +5726,7 @@ function SalesPipelineApp({ onLogout }) {
               { id: "competitors", label: "⚔️ Rakipler" },
               { id: "todos", label: "✅ To-Do" },
               { id: "actions", label: "📋 Aksiyonlar" },
+              { id: "guide", label: "📝 Guide" },
             ].map(t => (
               <button key={t.id} style={s.tab(activeTab === t.id)} onClick={() => { setActiveTab(t.id); if (t.id !== "weekly") setExpandedFirm(null); }}>{t.label}</button>
             ))}
@@ -5604,6 +5775,7 @@ function SalesPipelineApp({ onLogout }) {
             {activeTab === "competitors" && renderCompetitors()}
             {activeTab === "todos" && renderTodos()}
             {activeTab === "actions" && renderActions()}
+            {activeTab === "guide" && renderGuide()}
           </div>
         )}
 
