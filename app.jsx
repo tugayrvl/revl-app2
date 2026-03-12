@@ -88,6 +88,8 @@ const defaultData = () => ({
   excelImports: [],
   fuzzyBlacklist: [],
   demoProcesses: [],
+  weeklyMentality: {},
+  callStyleNotes: [],
 });
 
 const loadData = () => {
@@ -700,13 +702,14 @@ export default function SalesPipelineApp() {
   };
 
   const openCallLog = (company, contact) => {
-    setCallResult({ companyId: company.id, contactId: contact.id, contactName: contact.name, companyName: company.name, result: "", notes: "", meetingDate: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
+    setCallResult({ companyId: company.id, contactId: contact.id, contactName: contact.name, companyName: company.name, result: "", notes: "", contactNotes: "", askLater: "", callStyleNote: "", meetingDate: "", date: new Date().toISOString(), week: selectedWeek, year: currentYear });
     setShowModal("callLog");
   };
 
   const saveCallLog = () => {
     updateData(prev => {
-      const next = { ...prev, callLogs: [...prev.callLogs, { ...callResult, id: uid() }] };
+      const logEntry = { ...callResult, id: uid() };
+      const next = { ...prev, callLogs: [...prev.callLogs, logEntry] };
       // Update pipeline
       const comp = next.companies.find(c => c.id === callResult.companyId);
       if (comp) {
@@ -714,6 +717,19 @@ export default function SalesPipelineApp() {
         else if (callResult.result === "introduced") comp.pipeline = "regular_followup";
         else if (callResult.result === "unreached") comp.pipeline = "unreached";
         else if (callResult.result === "not_interested") comp.pipeline = "not_interested";
+      }
+      // Save call style note if provided
+      if (callResult.callStyleNote && callResult.callStyleNote.trim()) {
+        next.callStyleNotes = [...(prev.callStyleNotes || []), {
+          id: uid(),
+          text: callResult.callStyleNote.trim(),
+          date: new Date().toISOString(),
+          week: selectedWeek,
+          year: currentYear,
+          relatedCallLogId: logEntry.id,
+          companyName: callResult.companyName,
+          contactName: callResult.contactName,
+        }];
       }
       return next;
     });
@@ -1015,6 +1031,27 @@ export default function SalesPipelineApp() {
     );
   };
 
+  // Weekly mentality helpers
+  const weekMentalityKey = `${currentYear}-W${selectedWeek}`;
+  const weekMentality = (data.weeklyMentality || {})[weekMentalityKey] || "";
+  const [editingMentality, setEditingMentality] = useState(false);
+  const [mentalityDraft, setMentalityDraft] = useState("");
+
+  const saveMentality = () => {
+    updateData(prev => ({
+      ...prev,
+      weeklyMentality: { ...(prev.weeklyMentality || {}), [weekMentalityKey]: mentalityDraft }
+    }));
+    setEditingMentality(false);
+  };
+
+  // Weekly call logs for the list view
+  const weekCallLogs = useMemo(() =>
+    data.callLogs.filter(l => l.week === selectedWeek && l.year === currentYear)
+      .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [data.callLogs, selectedWeek]
+  );
+
   const renderWeeklyView = () => (
     <div>
       {/* Week Selector with Date Range */}
@@ -1026,6 +1063,31 @@ export default function SalesPipelineApp() {
         </div>
         <button style={s.btn()} onClick={() => { setSelectedWeek(w => Math.min(53, w + 1)); setWeekFilter("all"); }}>▶</button>
         {selectedWeek !== currentWeek && <button style={s.btn("primary")} onClick={() => { setSelectedWeek(currentWeek); setWeekFilter("all"); }}>Bu Hafta</button>}
+      </div>
+
+      {/* Weekly Mentality */}
+      <div style={{ ...s.card, borderLeft: `3px solid ${colors.purple}`, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editingMentality || weekMentality ? 8 : 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: colors.purple, letterSpacing: "0.05em" }}>🧠 HAFTANIN MENTALİTESİ</span>
+          {!editingMentality && (
+            <button style={{ ...s.btn(), padding: "3px 8px", fontSize: 10 }} onClick={() => { setMentalityDraft(weekMentality); setEditingMentality(true); }}>
+              <EditIcon size={10}/> {weekMentality ? "Düzenle" : "Yaz"}
+            </button>
+          )}
+        </div>
+        {editingMentality ? (
+          <div>
+            <textarea style={{ ...s.input, height: 60, borderColor: colors.purple + "40" }} value={mentalityDraft} onChange={e => setMentalityDraft(e.target.value)} placeholder="Bu haftanın odak noktası, yaklaşımı, mentalitesi..." autoFocus />
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <button style={s.btn("primary")} onClick={saveMentality}>Kaydet</button>
+              <button style={s.btn()} onClick={() => setEditingMentality(false)}>İptal</button>
+            </div>
+          </div>
+        ) : weekMentality ? (
+          <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{weekMentality}</div>
+        ) : (
+          <div style={{ fontSize: 11, color: colors.textDim }}>Bu hafta için henüz bir mentalite notu yazılmamış.</div>
+        )}
       </div>
 
       {/* Clickable Stats Row */}
@@ -1096,6 +1158,53 @@ export default function SalesPipelineApp() {
               {displayFollowups.map(c => renderCompanyCard(c, "followup"))}
             </>
           )}
+        </div>
+      )}
+
+      {/* ─── HAFTANIN ARAMALARI ─── */}
+      {weekCallLogs.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: colors.yellow, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            📋 Haftanın Aramaları ({weekCallLogs.length})
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  <th style={s.th}>Tarih</th>
+                  <th style={s.th}>Kişi</th>
+                  <th style={s.th}>Firma</th>
+                  <th style={s.th}>Sonuç</th>
+                  <th style={s.th}>Görüşme Notu</th>
+                  <th style={s.th}>Kişi Notu</th>
+                  <th style={{ ...s.th, color: colors.yellow }}>Sonrasında Sor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekCallLogs.map(log => {
+                  const resultMap = {
+                    meeting: { label: "Toplantı", color: colors.green, bg: colors.greenDim },
+                    introduced: { label: "Tanışıldı", color: colors.yellow, bg: colors.yellowDim },
+                    unreached: { label: "Ulaşılamadı", color: colors.red, bg: colors.redDim },
+                    wrong_number: { label: "Yanlış No", color: colors.orange, bg: "#3d1e08" },
+                    not_interested: { label: "İlgilenmiyor", color: colors.textDim, bg: colors.surfaceHover },
+                  };
+                  const r = resultMap[log.result] || { label: log.result || "—", color: colors.textMuted, bg: colors.surfaceHover };
+                  return (
+                    <tr key={log.id}>
+                      <td style={{ ...s.td, whiteSpace: "nowrap", fontSize: 11, color: colors.textDim }}>{new Date(log.date).toLocaleDateString("tr")}</td>
+                      <td style={{ ...s.td, fontWeight: 600, fontSize: 12 }}>{log.contactName}</td>
+                      <td style={{ ...s.td, fontSize: 12, color: colors.textMuted }}>{log.companyName}</td>
+                      <td style={s.td}><Badge color={r.color} bg={r.bg}>{r.label}</Badge></td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200 }}>{log.notes || "—"}</td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200, color: colors.textMuted }}>{log.contactNotes || "—"}</td>
+                      <td style={{ ...s.td, fontSize: 11, maxWidth: 200, color: log.askLater ? colors.yellow : colors.textDim }}>{log.askLater || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -1478,6 +1587,53 @@ export default function SalesPipelineApp() {
   };
 
   // ============================================================
+  // RENDER: GUIDE (Call Style Notes)
+  // ============================================================
+
+  const renderGuide = () => {
+    const notes = (data.callStyleNotes || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Group by week
+    const byWeek = {};
+    notes.forEach(n => {
+      const key = `${n.year || currentYear}-W${n.week || "?"}`;
+      if (!byWeek[key]) byWeek[key] = [];
+      byWeek[key].push(n);
+    });
+
+    return (
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>📝 Arama Stilim — Gelişim Rehberi</div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 20 }}>Her aramadan sonra aldığın kişisel notlar burada birikiyor. Scroll ederek okuyup kendi gelişim sürecini takip et.</div>
+
+        {notes.length === 0 ? (
+          <div style={{ ...s.card, textAlign: "center", color: colors.textMuted, padding: 40 }}>
+            Henüz arama stili notu yok. Arama yaptıktan sonra "Arama Stili Notum" alanını doldurunca burada birikmeye başlayacak.
+          </div>
+        ) : (
+          Object.entries(byWeek).map(([weekKey, weekNotes]) => (
+            <div key={weekKey} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: colors.purple, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ background: colors.purple + "20", padding: "2px 10px", borderRadius: 4 }}>📅 {weekKey}</span>
+                <span style={{ fontSize: 11, fontWeight: 400, color: colors.textDim }}>{weekNotes.length} not</span>
+              </div>
+              {weekNotes.map(note => (
+                <div key={note.id} style={{ ...s.card, borderLeft: `3px solid ${colors.purple}`, padding: "12px 16px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{note.text}</div>
+                  <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 10, color: colors.textDim }}>
+                    <span>{new Date(note.date).toLocaleDateString("tr")} {new Date(note.date).toLocaleTimeString("tr", { hour: "2-digit", minute: "2-digit" })}</span>
+                    {note.companyName && <span>→ {note.companyName}</span>}
+                    {note.contactName && <span>({note.contactName})</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  // ============================================================
   // MODALS
   // ============================================================
 
@@ -1651,8 +1807,24 @@ export default function SalesPipelineApp() {
                 </div>
               )}
               <div>
-                <label style={{ fontSize: 11, color: colors.textMuted }}>Notlar</label>
-                <textarea style={{ ...s.input, height: 80 }} value={callResult.notes || ""} onChange={e => setCallResult({ ...callResult, notes: e.target.value })} placeholder="Görüşme notlarını yaz..." />
+                <label style={{ fontSize: 11, color: colors.textMuted }}>Görüşme Notları</label>
+                <textarea style={{ ...s.input, height: 60 }} value={callResult.notes || ""} onChange={e => setCallResult({ ...callResult, notes: e.target.value })} placeholder="Görüşmede ne konuşuldu..." />
+              </div>
+              {(callResult.result === "introduced" || callResult.result === "meeting") && (
+                <>
+                  <div>
+                    <label style={{ fontSize: 11, color: colors.textMuted }}>Kişi Hakkında Not</label>
+                    <textarea style={{ ...s.input, height: 50 }} value={callResult.contactNotes || ""} onChange={e => setCallResult({ ...callResult, contactNotes: e.target.value })} placeholder="Bu kişi hakkında hatırlanacak detaylar..." />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: colors.yellow }}>🔖 Sonrasında Sor</label>
+                    <textarea style={{ ...s.input, height: 50, borderColor: colors.yellow + "40" }} value={callResult.askLater || ""} onChange={e => setCallResult({ ...callResult, askLater: e.target.value })} placeholder="Bir sonraki aramada sorulacak şeyler..." />
+                  </div>
+                </>
+              )}
+              <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 10 }}>
+                <label style={{ fontSize: 11, color: colors.purple }}>📝 Arama Stili Notum (kişisel gelişim)</label>
+                <textarea style={{ ...s.input, height: 50, borderColor: colors.purple + "40" }} value={callResult.callStyleNote || ""} onChange={e => setCallResult({ ...callResult, callStyleNote: e.target.value })} placeholder="Bu aramada ne iyi gitti, ne yapmalıydım, kendime not..." />
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
@@ -1721,6 +1893,7 @@ export default function SalesPipelineApp() {
             { id: "companies", label: "🏢 Firmalar" },
             { id: "competitors", label: "⚔️ Rakipler" },
             { id: "todos", label: "✅ To-Do" },
+            { id: "guide", label: "📝 Guide" },
           ].map(t => (
             <button key={t.id} style={s.tab(activeTab === t.id)} onClick={() => setActiveTab(t.id)}>{t.label}</button>
           ))}
@@ -1746,6 +1919,7 @@ export default function SalesPipelineApp() {
         {activeTab === "companies" && renderAllCompanies()}
         {activeTab === "competitors" && renderCompetitors()}
         {activeTab === "todos" && renderTodos()}
+        {activeTab === "guide" && renderGuide()}
       </div>
 
       {/* Modals */}
